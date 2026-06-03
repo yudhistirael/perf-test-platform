@@ -252,6 +252,13 @@ class APIScanner:
             except Exception:
                 pass
 
+            # Step 1a: Grab all JS bundle URLs from DOM (needed for route extraction)
+            try:
+                dom_js = await page.eval_on_selector_all('script[src]', 'els => els.map(e => e.src)')
+                self._dom_js_urls = [u for u in dom_js if u and u.endswith('.js')]
+            except Exception:
+                self._dom_js_urls = []
+
             # Step 1b: LOGIN FIRST if credentials provided
             if self.email and self.password:
                 try:
@@ -318,9 +325,8 @@ class APIScanner:
         
         # Also get JS from DOM (backup if network capture missed them)
         try:
-            dom_scripts = await self._get_dom_scripts
-            for script_url in dom_scripts:
-                if script_url.endswith('.js') and base_netloc in script_url:
+            for script_url in self._dom_js_urls:
+                if script_url.endswith('.js'):
                     js_urls.add(script_url)
         except:
             pass
