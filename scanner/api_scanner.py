@@ -316,9 +316,12 @@ class APIScanner:
             if parsed.path.endswith('.js') and (parsed.netloc == base_netloc or not parsed.netloc):
                 js_urls.add(cap['url'])
         
-        # Also get JS from DOM
+        # Also get JS from DOM (backup if network capture missed them)
         try:
-            dom_scripts = await self._get_dom_scripts  # will be set by caller
+            dom_scripts = await self._get_dom_scripts
+            for script_url in dom_scripts:
+                if script_url.endswith('.js') and base_netloc in script_url:
+                    js_urls.add(script_url)
         except:
             pass
         
