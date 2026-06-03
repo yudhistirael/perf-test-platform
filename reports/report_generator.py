@@ -62,6 +62,7 @@ Provide:
                         "messages": [{"role": "user", "content": summary}],
                         "temperature": 0.7,
                         "max_tokens": 1000,
+                        "stream": False,
                     },
                     headers={"Authorization": f"Bearer {api_key}"}
                 )
