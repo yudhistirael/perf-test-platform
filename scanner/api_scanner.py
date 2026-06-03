@@ -48,18 +48,94 @@ class APIScanner:
 
     async def discover(self):
         """Full reactive discovery using headless browser + network intercept."""
+        # PHASE 0: Detect tech stack FIRST
+        await self._detect_stack()
+        
+        # PHASE 1-4: Full discovery
         await self._browser_scan()
         await self._try_openapi()
         await self._try_robots()
         await self._try_sitemap()
         
-        # Build structured result with api_base_url
+        # Build structured result with api_base_url + stack info
         api_base = getattr(self, 'api_base_url', None)
+        stack = getattr(self, 'detected_stack', {})
         
         return {
             'endpoints': self.endpoints,
             'api_base_url': api_base,
+            'stack': stack,
         }
+    
+    async def _detect_stack(self):
+        """Detect frontend framework, backend, server, WAF, etc."""
+        import httpx
+        stack = {
+            'frontend': None,
+            'server': None,
+            'waf': None,
+            'cdn': None,
+            'ui_framework': None,
+        }
+        
+        try:
+            async with httpx.AsyncClient(verify=False, timeout=httpx.Timeout(10)) as client:
+                r = await client.head(self.base_url)
+                headers = {k.lower(): v for k, v in r.headers.items()}
+                
+                # Detect server
+                if 'server' in headers:
+                    server = headers['server'].lower()
+                    if 'nginx' in server:
+                        stack['server'] = 'nginx'
+                    elif 'apache' in server:
+                        stack['server'] = 'apache'
+                    elif 'microsoft-iis' in server:
+                        stack['server'] = 'iis'
+                
+                # Detect WAF/CDN
+                if 'x-cdn' in headers:
+                    stack['cdn'] = headers['x-cdn']
+                if 'imperva' in str(headers).lower():
+                    stack['waf'] = 'Imperva'
+                elif 'cloudflare' in str(headers).lower():
+                    stack['waf'] = 'Cloudflare'
+                
+                # Get HTML to detect frontend
+                r2 = await client.get(self.base_url)
+                html = r2.text[:5000]
+                
+                # Detect React
+                if '/assets/' in html and 'react' in html.lower():
+                    stack['frontend'] = 'React'
+                if 'vite.svg' in html or 'module' in html:
+                    stack['build_tool'] = 'Vite'
+                
+                # Detect Vue
+                if 'vue' in html.lower() and '__vue' in html:
+                    stack['frontend'] = 'Vue'
+                
+                # Detect Angular
+                if 'ng-app' in html or 'ng-version' in html:
+                    stack['frontend'] = 'Angular'
+                
+                # Detect Svelte
+                if 'svelte' in html.lower():
+                    stack['frontend'] = 'Svelte'
+                
+                # Detect UI frameworks
+                if 'flowbite' in html.lower():
+                    stack['ui_framework'] = 'Flowbite'
+                elif 'bootstrap' in html.lower():
+                    stack['ui_framework'] = 'Bootstrap'
+                elif 'tailwind' in html.lower() or 'tailwindcss' in html.lower():
+                    stack['ui_framework'] = 'Tailwind'
+                elif 'material' in html.lower():
+                    stack['ui_framework'] = 'Material Design'
+        except Exception:
+            pass
+        
+        self.detected_stack = stack
     
     async def _validate_endpoints(self):
         """Quick validation — skip API paths from js-bundle (they exist on different host)."""

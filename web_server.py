@@ -180,11 +180,14 @@ async def _run_test_async(job_id: str, base_url: str, email: str, password: str,
         if isinstance(scan_result, dict):
             all_scanned = scan_result.get('endpoints', [])
             api_base_url = scan_result.get('api_base_url') or base_url
+            detected_stack = scan_result.get('stack', {})
         else:
             all_scanned = scan_result or []
             api_base_url = base_url
+            detected_stack = {}
         
-        update(25, f'Discovered {len(all_scanned)} paths')
+        stack_desc = ', '.join(f"{k}: {v}" for k, v in detected_stack.items() if v)
+        update(25, f'Discovered {len(all_scanned)} paths | Stack: {stack_desc or "unknown"}')
         
         # Authenticate FIRST if credentials provided
         auth_token = None
