@@ -188,17 +188,17 @@ async def _run_test_async(job_id: str, base_url: str, email: str, password: str,
         
         stack_desc = ', '.join(f"{k}: {v}" for k, v in detected_stack.items() if v)
         update(25, f'Discovered {len(all_scanned)} paths | Stack: {stack_desc or "unknown"}')
-        
-        # Authenticate FIRST if credentials provided
+        # Authenticate FIRST if credentials provided — authenticate to FRONTEND, not gateway
         auth_token = None
         if email and password:
-            update(28, 'Authenticating...')
             try:
-                import httpx
                 async with httpx.AsyncClient(verify=False, timeout=httpx.Timeout(15)) as client:
                     for login_path in ['/api/auth/login', '/api/login', '/auth/login', '/login']:
                         try:
-                            r = await client.post(urljoin(base_url, login_path), json={'email': email, 'password': password})
+                            url = urljoin(base_url, login_path)  # Use base_url (port 3523), NOT api_base_url
+                            payload = {'email': email, 'password': password}
+                            r = await client.post(url, json=payload)
+                            
                             if r.status_code in (200, 201):
                                 data = r.json()
                                 for key in ('token', 'access_token', 'accessToken', 'jwt'):
@@ -259,12 +259,15 @@ async def _run_test_async(job_id: str, base_url: str, email: str, password: str,
         total_ep = min(len(be_endpoints), be_endpoints_max) or 1
         for i, ep in enumerate(be_endpoints[:be_endpoints_max]):
             pct = 65 + int((i / total_ep) * 18)
-            update(pct, f'Backend [{i+1}/{total_ep}]: {ep["method"]} {ep["path"]}')
+            # Prepend /api if path doesn't already start with /api
+            raw_path = ep.get('path', '')
+            api_path = raw_path if raw_path.startswith('/api') else '/api' + raw_path
+            update(pct, f'Backend [{i+1}/{total_ep}]: {ep["method"]} {api_path}')
             try:
-                result = await be_test._test_endpoint(ep['path'], ep['method'], be_requests_per_endpoint, concurrent_users)
+                result = await be_test._test_endpoint(api_path, ep['method'], be_requests_per_endpoint, concurrent_users)
                 # Only include if NOT all 404
                 if result.get('status_codes', {}).get(404, 0) < be_requests_per_endpoint:
-                    be_results[f"{ep['method']} {ep['path']}"] = result
+                    be_results[f"{ep['method']} {api_path}"] = result
             except Exception as e:
                 pass
         be_count = sum(1 for v in be_results.values() if isinstance(v, dict) and 'avg_latency_ms' in v)
