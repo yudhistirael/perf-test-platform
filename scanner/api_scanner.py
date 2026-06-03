@@ -17,8 +17,13 @@ class APIScanner:
         path = path.strip()
         if not path or len(path) > 500:
             return
+        
+        # Normalize path — ensure it starts with / and resolve relative paths
+        if not path.startswith('/') and not path.startswith('http'):
+            path = '/' + path
+        
         # Skip wildcards and query string templates
-        if '*' in path or '$' in path or '{' in path:
+        if '*' in path or '$' in path or '{' in path or '?' in path:
             return
         # Skip Cloudflare & CDN challenge paths
         if any(x in path for x in ('/cdn-cgi/', '/cf-', '/__cf', '/challenge-platform', '/turnstile')):
@@ -31,6 +36,10 @@ class APIScanner:
         # Skip extremely long paths (likely tokens/hashes)
         if len(path) > 200:
             return
+        # Skip phantom /api path with no sub-path
+        if path == '/api' or path == '/api/':
+            return
+        
         key = f"{method}:{path}"
         if key in self._seen:
             return

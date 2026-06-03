@@ -42,9 +42,11 @@ Key Metrics:
 Issues Found: {json.dumps([{'type': i.get('type','?'), 'severity': i.get('severity','?'), 'message': i.get('message','')} for i in issues[:5]], indent=2)}
 
 Provide:
-1. Executive summary (2-3 sentences) of overall performance
-2. Top 3 technical improvements needed (specific, actionable)
-3. Estimated impact if improvements are implemented
+1. Ringkasan umum (2-3 kalimat) tentang performa secara keseluruhan
+2. Top 3 perbaikan teknis yang dibutuhkan (spesifik dan bisa diimplementasikan)
+3. Estimasi dampak jika perbaikan tersebut dilakukan
+
+IMPORTANT: Tulis semua output dalam Bahasa Indonesia. Gunakan format markdown yang rapi.
 """
             
             async with httpx.AsyncClient(timeout=httpx.Timeout(30)) as client:
@@ -423,26 +425,47 @@ Provide:
 <title>Performance Report — {self.domain}</title>
 <style>
 *{{margin:0;padding:0;box-sizing:border-box}}
-body{{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:#0f172a;color:#e2e8f0;padding:2rem}}
-.container{{max-width:1300px;margin:0 auto}}
-h1{{font-size:1.8rem;margin-bottom:0.5rem;color:#f1f5f9}}
-.subtitle{{color:#94a3b8;margin-bottom:2rem;font-size:0.9rem}}
-.grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:1rem;margin-bottom:2rem}}
-.card{{background:#1e293b;border-radius:12px;padding:1.5rem;text-align:center}}
-.card h3{{font-size:0.8rem;color:#94a3b8;margin-bottom:0.5rem;text-transform:uppercase;letter-spacing:0.05em}}
-.card .value{{font-size:2rem;font-weight:700}}
-.section{{background:#1e293b;border-radius:12px;padding:1.5rem;margin-bottom:1.5rem}}
-.section h2{{font-size:1.1rem;margin-bottom:1rem;color:#f1f5f9;border-bottom:1px solid #334155;padding-bottom:0.5rem}}
-table{{width:100%;border-collapse:collapse;font-size:0.8rem}}
-th{{text-align:left;padding:0.6rem;background:#334155;color:#94a3b8;font-weight:600;position:sticky;top:0}}
-td{{padding:0.6rem;border-bottom:1px solid #1e293b}}
-tr:hover{{background:#334155}}
-code{{background:#334155;padding:0.2rem 0.4rem;border-radius:4px;font-size:0.8rem}}
-.badge{{display:inline-block;padding:0.2rem 0.6rem;border-radius:9999px;font-size:0.7rem;font-weight:600}}
-.good{{background:#10b98122;color:#10b981;border:1px solid #10b98144}}
-.needs_improvement{{background:#f59e0b22;color:#f59e0b;border:1px solid #f59e0b44}}
-.poor{{background:#ef444422;color:#ef4444;border:1px solid #ef444444}}
-.timestamp{{text-align:center;color:#64748b;font-size:0.8rem;margin-top:2rem}}
+body{{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:#0a0f1e;color:#e2e8f0;padding:2rem;min-height:100vh}}
+.container{{max-width:1400px;margin:0 auto}}
+h1{{font-size:2rem;font-weight:800;margin-bottom:0.4rem;color:#f1f5f9;letter-spacing:-0.02em}}
+.subtitle{{color:#64748b;margin-bottom:2.5rem;font-size:0.9rem;display:flex;align-items:center;gap:0.5rem}}
+.subtitle code{{background:#1e293b;padding:0.2rem 0.6rem;border-radius:6px;color:#94a3b8;font-size:0.85rem}}
+.grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:1rem;margin-bottom:2rem}}
+.card{{background:linear-gradient(135deg,#1e293b,#162032);border-radius:16px;padding:1.5rem;text-align:center;border:1px solid #334155;transition:transform 0.2s;position:relative;overflow:hidden}}
+.card::before{{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,#3b82f6,#8b5cf6)}}
+.card h3{{font-size:0.7rem;color:#64748b;margin-bottom:0.75rem;text-transform:uppercase;letter-spacing:0.08em;font-weight:600}}
+.card .value{{font-size:2.2rem;font-weight:800;line-height:1}}
+.card .sublabel{{font-size:0.7rem;color:#475569;margin-top:0.4rem}}
+.section{{background:#111827;border-radius:16px;padding:1.75rem;margin-bottom:1.5rem;border:1px solid #1e293b}}
+.section h2{{font-size:1rem;font-weight:700;margin-bottom:1.25rem;color:#f1f5f9;display:flex;align-items:center;gap:0.5rem;padding-bottom:0.75rem;border-bottom:1px solid #1e293b;letter-spacing:-0.01em}}
+.ai-box{{background:#0d1424;padding:1.5rem;border-radius:12px;border-left:4px solid #3b82f6;font-size:0.88rem;line-height:1.8;color:#cbd5e1}}
+.ai-box h2,.ai-box h3{{color:#93c5fd;margin:1rem 0 0.4rem;font-size:0.9rem}}
+.ai-box strong{{color:#e2e8f0}}
+.ai-box ul,.ai-box ol{{padding-left:1.25rem;margin:0.5rem 0}}
+.ai-box li{{margin-bottom:0.3rem}}
+table{{width:100%;border-collapse:collapse;font-size:0.78rem}}
+th{{text-align:left;padding:0.7rem 0.8rem;background:#1e293b;color:#64748b;font-weight:600;font-size:0.7rem;text-transform:uppercase;letter-spacing:0.05em;position:sticky;top:0}}
+th:first-child{{border-radius:8px 0 0 8px}}
+th:last-child{{border-radius:0 8px 8px 0}}
+td{{padding:0.65rem 0.8rem;border-bottom:1px solid #1a2235;color:#cbd5e1}}
+tr:last-child td{{border-bottom:none}}
+tr:hover td{{background:#1e293b}}
+code{{background:#1e293b;padding:0.15rem 0.4rem;border-radius:5px;font-size:0.78rem;color:#93c5fd;font-family:"Fira Code","Cascadia Code",monospace}}
+.badge{{display:inline-flex;align-items:center;padding:0.2rem 0.6rem;border-radius:9999px;font-size:0.68rem;font-weight:700;letter-spacing:0.03em}}
+.good{{background:#10b98115;color:#34d399;border:1px solid #10b98133}}
+.needs_improvement{{background:#f59e0b15;color:#fbbf24;border:1px solid #f59e0b33}}
+.poor{{background:#ef444415;color:#f87171;border:1px solid #ef444433}}
+.unknown{{background:#64748b15;color:#94a3b8;border:1px solid #64748b33}}
+.issue-card{{border-radius:10px;padding:1rem 1.25rem;margin-bottom:0.75rem;display:flex;align-items:flex-start;gap:0.75rem}}
+.issue-dot{{width:10px;height:10px;border-radius:50%;margin-top:4px;flex-shrink:0}}
+.sev-label{{font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;padding:0.15rem 0.5rem;border-radius:4px;margin-left:auto;flex-shrink:0}}
+.rec-card{{background:#0f172a;border:1px solid #1e293b;border-radius:10px;padding:1rem 1.25rem;margin-bottom:0.75rem}}
+.rec-card h4{{color:#93c5fd;font-size:0.85rem;margin-bottom:0.3rem}}
+.rec-card p{{color:#94a3b8;font-size:0.82rem;line-height:1.6}}
+.timestamp{{text-align:center;color:#334155;font-size:0.75rem;margin-top:2.5rem;padding-top:1.5rem;border-top:1px solid #1e293b}}
+.table-wrap{{overflow-x:auto;border-radius:10px}}
+.legend{{margin-top:1rem;font-size:0.72rem;color:#475569;display:flex;gap:0.75rem;flex-wrap:wrap;align-items:center}}
+.legend strong{{color:#64748b}}
 </style>
 </head>
 <body>
