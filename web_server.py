@@ -174,7 +174,16 @@ async def _run_test_async(job_id: str, base_url: str, email: str, password: str,
         # Step 1: Scan
         update(10, 'Scanning API endpoints...')
         scanner = APIScanner(base_url)
-        all_scanned = await scanner.discover()
+        scan_result = await scanner.discover()
+        
+        # Handle new structured return from scanner
+        if isinstance(scan_result, dict):
+            all_scanned = scan_result.get('endpoints', [])
+            api_base_url = scan_result.get('api_base_url') or base_url
+        else:
+            all_scanned = scan_result or []
+            api_base_url = base_url
+        
         update(25, f'Discovered {len(all_scanned)} paths')
         
         # Authenticate FIRST if credentials provided
@@ -200,22 +209,30 @@ async def _run_test_async(job_id: str, base_url: str, email: str, password: str,
             except:
                 pass
         
-        # Separate FE pages (browseable paths) from BE endpoints (API paths starting with /api or /rest or known patterns)
-        be_patterns = ('/api/', '/rest/', '/graphql', '/v1/', '/v2/', '/endpoint/')
+        # Separate FE pages from BE endpoints using source field
+        fe_sources = {'react-router', 'crawl', 'form', 'homepage'}
         fe_pages = []
         be_endpoints = []
         
         for item in all_scanned:
+            source = item.get('source', '')
             path = item.get('path', '')
-            method = item.get('method', 'GET')
-            is_api = any(path.startswith(p) for p in be_patterns) or method != 'GET'
-            if is_api:
-                be_endpoints.append(item)
-            else:
+            
+            if source in fe_sources:
                 # Add name if missing
                 if 'name' not in item:
                     item['name'] = path.strip('/').split('/')[-1].replace('-', ' ').title() or 'Homepage'
                 fe_pages.append(item)
+            elif source in ('js-bundle', 'js-api-call', 'env.js', 'network', 'inline-script', 'config'):
+                be_endpoints.append(item)
+            else:
+                # Default: use heuristic
+                if '/inventory/' in path or '/gateway/' in path or '/api/' in path:
+                    be_endpoints.append(item)
+                else:
+                    if 'name' not in item:
+                        item['name'] = path.strip('/').split('/')[-1].replace('-', ' ').title() or 'Homepage'
+                    fe_pages.append(item)
         
         # Ensure homepage is in FE pages
         if not any(p['path'] == '/' for p in fe_pages):
@@ -232,7 +249,8 @@ async def _run_test_async(job_id: str, base_url: str, email: str, password: str,
 
         # Step 3: BE Test — ONLY API endpoints
         update(65, 'Running Backend Load Tests...')
-        be_test = APILoadTest(base_url, email, password, be_endpoints_max, be_requests_per_endpoint)
+        # Use api_base_url from scanner (may be different host/port for microservices)
+        be_test = APILoadTest(api_base_url, email, password, be_endpoints_max, be_requests_per_endpoint)
         be_test.token = auth_token  # Use auth token
         be_results = {}
         total_ep = min(len(be_endpoints), be_endpoints_max) or 1

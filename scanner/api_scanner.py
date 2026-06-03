@@ -52,7 +52,37 @@ class APIScanner:
         await self._try_openapi()
         await self._try_robots()
         await self._try_sitemap()
-        return self.endpoints
+        
+        # Build structured result with api_base_url
+        api_base = getattr(self, 'api_base_url', None)
+        
+        return {
+            'endpoints': self.endpoints,
+            'api_base_url': api_base,
+        }
+    
+    async def _validate_endpoints(self):
+        """Quick validation — skip API paths from js-bundle (they exist on different host)."""
+        # Don't validate paths sourced from JS bundles — they're API paths on a different host
+        # Only validate paths from network crawl, homepage, form, etc.
+        skip_sources = {'js-bundle', 'js-api-call', 'env.js'}
+        validate = [ep for ep in self.endpoints if ep['source'] not in skip_sources]
+        keep = [ep for ep in self.endpoints if ep['source'] in skip_sources]
+        
+        # Quick validation on non-API paths
+        import httpx
+        valid = []
+        async with httpx.AsyncClient(verify=False, timeout=httpx.Timeout(5)) as client:
+            for ep in validate:
+                try:
+                    url = urljoin(self.base_url, ep['path'])
+                    r = await client.head(url, follow_redirects=True)
+                    if r.status_code != 404:
+                        valid.append(ep)
+                except Exception:
+                    valid.append(ep)
+        
+        self.endpoints = keep + valid
 
     async def _browser_scan(self):
         """Open page in Playwright, intercept ALL network requests, crawl all links/forms."""
@@ -102,6 +132,12 @@ class APIScanner:
 
             # Step 3: Extract endpoints from JS (inline + linked)
             await self._extract_from_js(page)
+            
+            # Step 3b: Extract React Router paths from ALL captured JS bundles
+            await self._extract_react_routes(captured_urls)
+            
+            # Step 3c: Parse env.js for API base URL
+            await self._parse_env_js()
 
             # Step 4: Crawl all internal links (depth 2)
             await self._crawl_links(page, base_netloc, depth=2)
@@ -116,6 +152,80 @@ class APIScanner:
             await self._trigger_interactions(page, captured_urls, base_netloc)
 
             await browser.close()
+
+    async def _extract_react_routes(self, captured_urls):
+        """Extract React Router paths from ALL captured JS bundles."""
+        import httpx
+        base_netloc = urlparse(self.base_url).netloc
+        
+        # Collect ALL unique JS URLs from network captures
+        js_urls = set()
+        for cap in captured_urls:
+            parsed = urlparse(cap['url'])
+            if parsed.path.endswith('.js') and (parsed.netloc == base_netloc or not parsed.netloc):
+                js_urls.add(cap['url'])
+        
+        # Also get JS from DOM
+        try:
+            dom_scripts = await self._get_dom_scripts  # will be set by caller
+        except:
+            pass
+        
+        async with httpx.AsyncClient(verify=False, timeout=httpx.Timeout(15)) as client:
+            for js_url in list(js_urls)[:30]:
+                try:
+                    r = await client.get(js_url)
+                    if r.status_code != 200:
+                        continue
+                    content = r.text
+                    
+                    # React Router path definitions: path:"/xxx" or path: '/xxx'
+                    routes = re.findall(r'path\s*:\s*["\']([^"\']+)["\']', content, re.IGNORECASE)
+                    for route in routes:
+                        if route.startswith('/') and not route.startswith('/http'):
+                            # Skip dynamic params like /:id but keep the base
+                            clean = re.sub(r'/:[^/]+', '', route)
+                            if clean and clean != '/':
+                                self._add(clean, 'GET', 'react-router')
+                    
+                    # Also extract fetch/axios API calls: fetch("/api/xxx"), axios.get("/api/xxx")
+                    api_calls = re.findall(r'(?:fetch|axios|\.get|\.post|\.put|\.delete|\.patch)\s*\(\s*["`\']([^"`\']+)["`\']', content, re.IGNORECASE)
+                    for api in api_calls:
+                        if api.startswith('/') or api.startswith('http'):
+                            self._add(api, 'GET', 'js-api-call')
+                except Exception:
+                    continue
+    
+    async def _parse_env_js(self):
+        """Parse env.js for API base URL and extract its paths."""
+        import httpx
+        try:
+            async with httpx.AsyncClient(verify=False, timeout=httpx.Timeout(10)) as client:
+                r = await client.get(urljoin(self.base_url, '/env.js'))
+                if r.status_code != 200:
+                    return
+                
+                content = r.text
+                # Extract REACT_APP_API_URL value
+                api_match = re.search(r'REACT_APP_API_URL["\']?\s*:\s*["\']([^"\']+)', content)
+                if api_match:
+                    api_url = api_match.group(1)
+                    parsed = urlparse(api_url)
+                    # Store API base URL for BE testing
+                    if not hasattr(self, 'api_base_url'):
+                        self.api_base_url = api_url
+                    # Add the API base path
+                    if parsed.path:
+                        self._add(parsed.path, 'GET', 'env.js')
+                
+                # Extract all REACT_APP_* URLs
+                all_urls = re.findall(r'REACT_APP_\w*URL\w*["\']?\s*:\s*["\']([^"\']+)', content)
+                for url in all_urls:
+                    parsed = urlparse(url)
+                    if parsed.path and parsed.netloc:
+                        self._add(parsed.path, 'GET', 'env.js')
+        except Exception:
+            pass
 
     async def _extract_from_html(self, page):
         """Extract ALL endpoints from HTML: forms, data attributes, href, action, etc."""
