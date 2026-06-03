@@ -73,8 +73,8 @@ class APILoadTest:
                 except Exception:
                     continue
 
-    async def _test_endpoint(self, path: str, method: str = 'GET', num_requests: int = 15):
-        """Test endpoint with configurable request count."""
+    async def _test_endpoint(self, path: str, method: str = 'GET', num_requests: int = 15, concurrent_users: int = 1):
+        """Test endpoint with configurable concurrency and request count."""
         result = {
             'path': path,
             'method': method,
@@ -83,17 +83,18 @@ class APILoadTest:
             'success': 0,
             'status_codes': {},
         }
-        
+
         headers = {}
         if self.token:
             headers['Authorization'] = f'Bearer {self.token}'
 
-        async with httpx.AsyncClient(verify=False, timeout=httpx.Timeout(30)) as client:
-            for _ in range(num_requests):
+        semaphore = asyncio.Semaphore(concurrent_users)
+
+        async def single_request(client):
+            async with semaphore:
                 start = time.perf_counter()
                 try:
                     url = urljoin(self.base_url, path)
-                    
                     if method == 'GET':
                         r = await client.get(url, headers=headers)
                     elif method == 'POST':
@@ -106,45 +107,46 @@ class APILoadTest:
                         r = await client.patch(url, headers=headers, json={})
                     else:
                         r = await client.request(method, url, headers=headers)
-
                     latency = (time.perf_counter() - start) * 1000
-                    result['latencies'].append(latency)
-                    
-                    # Track status codes
-                    status = r.status_code
-                    result['status_codes'][status] = result['status_codes'].get(status, 0) + 1
-                    
-                    if status < 400:
-                        result['success'] += 1
-                    else:
-                        result['errors'] += 1
-
+                    return latency, r.status_code, None
                 except asyncio.TimeoutError:
-                    result['latencies'].append(30000)
-                    result['errors'] += 1
+                    return 10000, None, 'timeout'
                 except Exception as e:
-                    result['latencies'].append(30000)
+                    return 10000, None, str(e)
+
+        async with httpx.AsyncClient(verify=False, timeout=httpx.Timeout(10)) as client:
+            tasks = [single_request(client) for _ in range(num_requests)]
+            responses = await asyncio.gather(*tasks)
+
+        for latency, status, err in responses:
+            result['latencies'].append(latency)
+            if err:
+                result['errors'] += 1
+            else:
+                result['status_codes'][status] = result['status_codes'].get(status, 0) + 1
+                if status < 400:
+                    result['success'] += 1
+                else:
                     result['errors'] += 1
 
-        # Calculate statistics
         if result['latencies']:
             result['avg_latency_ms'] = round(mean(result['latencies']), 2)
             result['min_latency_ms'] = round(min(result['latencies']), 2)
             result['max_latency_ms'] = round(max(result['latencies']), 2)
             result['median_latency_ms'] = round(median(result['latencies']), 2)
-            
             if len(result['latencies']) > 1:
                 result['stdev_latency_ms'] = round(stdev(result['latencies']), 2)
-            
-            sorted_latencies = sorted(result['latencies'])
-            result['p50_latency_ms'] = round(sorted_latencies[int(len(sorted_latencies) * 0.50)], 2)
-            result['p75_latency_ms'] = round(sorted_latencies[int(len(sorted_latencies) * 0.75)], 2)
-            result['p90_latency_ms'] = round(sorted_latencies[int(len(sorted_latencies) * 0.90)], 2)
-            result['p95_latency_ms'] = round(sorted_latencies[int(len(sorted_latencies) * 0.95)], 2)
-            result['p99_latency_ms'] = round(sorted_latencies[int(len(sorted_latencies) * 0.99)], 2)
+            sorted_l = sorted(result['latencies'])
+            n = len(sorted_l)
+            result['p50_latency_ms'] = round(sorted_l[int(n * 0.50)], 2)
+            result['p75_latency_ms'] = round(sorted_l[int(n * 0.75)], 2)
+            result['p90_latency_ms'] = round(sorted_l[int(n * 0.90)], 2)
+            result['p95_latency_ms'] = round(sorted_l[int(n * 0.95)], 2)
+            result['p99_latency_ms'] = round(sorted_l[min(int(n * 0.99), n-1)], 2)
 
         result['error_rate'] = round((result['errors'] / num_requests) * 100, 2)
         result['total_requests'] = num_requests
-        result['latencies'] = []  # Don't include raw list in results
-
+        result['concurrent_users'] = concurrent_users
+        result['throughput_rps'] = round(num_requests / (sum(result['latencies']) / 1000 / concurrent_users), 2) if result['latencies'] else 0
+        result['latencies'] = []
         return result

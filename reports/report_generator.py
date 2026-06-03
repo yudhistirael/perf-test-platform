@@ -12,7 +12,70 @@ class ReportGenerator:
         self.results = results
         self.domain = urlparse(base_url).netloc
 
+    async def _get_llm_analysis(self, fe, be, issues, overall):
+        """Get 9router LLM analysis of performance results."""
+        try:
+            import httpx
+            
+            # Prepare summary for LLM
+            summary = f"""
+Performance Test Results for {self.base_url}:
+- Overall Grade: {overall['grade']}
+- Frontend Pages Tested: {len([v for v in fe.values() if isinstance(v, dict)])}
+- Backend Endpoints Tested: {len([v for v in be.values() if isinstance(v, dict)])}
+- Critical Issues: {len([i for i in issues if i['severity'] == 'critical'])}
+- High Issues: {len([i for i in issues if i['severity'] == 'high'])}
+
+Key Metrics:
+- Average FE Load Time: {overall.get('avg_fe_load_time', 'N/A')}ms
+- Average BE Latency: {overall.get('avg_be_latency', 'N/A')}ms
+- Error Rate: {overall.get('error_rate', 'N/A')}%
+
+Issues Found: {json.dumps([{'type': i['type'], 'severity': i['severity'], 'message': i['message']} for i in issues[:5]], indent=2)}
+
+Provide:
+1. Executive summary (2-3 sentences) of overall performance
+2. Top 3 technical improvements needed (specific, actionable)
+3. Estimated impact if improvements are implemented
+"""
+            
+            payload = {
+                "model": "kr/claude-sonnet-4.5",
+                "messages": [{"role": "user", "content": summary}],
+                "temperature": 0.7,
+                "max_tokens": 1000,
+            }
+            
+            async with httpx.AsyncClient(timeout=httpx.Timeout(30)) as client:
+                r = await client.post(
+                    "http://46.250.234.185:20128/v1/chat/completions",
+                    json=payload,
+                    headers={"Authorization": "Bearer sk-34595258629c1acb-s28ah4-978aa6e1"}
+                )
+                if r.status_code == 200:
+                    data = r.json()
+                    analysis = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+                    return analysis
+        except Exception as e:
+            print(f"LLM analysis failed: {e}")
+        return None
+
     def generate(self):
+        """Generate HTML report (sync wrapper)."""
+        import asyncio
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                import concurrent.futures
+                with concurrent.futures.ThreadPoolExecutor() as pool:
+                    future = pool.submit(asyncio.run, self._generate_async())
+                    return future.result()
+            else:
+                return loop.run_until_complete(self._generate_async())
+        except Exception:
+            return asyncio.run(self._generate_async())
+
+    async def _generate_async(self):
         """Generate HTML report."""
         report_dir = Path(__file__).parent.parent / 'reports'
         report_dir.mkdir(parents=True, exist_ok=True)
@@ -25,7 +88,10 @@ class ReportGenerator:
         overall = self._calc_overall(fe, be, issues)
         recommendations = self._generate_recommendations(fe, be, issues)
 
-        html = self._build_html(fe, be, overall, issues, recommendations)
+        # Get LLM analysis from 9router
+        ai_analysis = await self._get_llm_analysis(fe, be, issues, overall)
+
+        html = self._build_html(fe, be, overall, issues, recommendations, ai_analysis)
         report_path.write_text(html)
         return str(report_path)
 
@@ -265,7 +331,7 @@ class ReportGenerator:
         if score in ('unknown',): return '#64748b'
         return '#ef4444'
 
-    def _build_html(self, fe, be, overall, issues, recommendations):
+    def _build_html(self, fe, be, overall, issues, recommendations, ai_analysis=None):
         fe_rows = []
         for path, data in fe.items():
             if not isinstance(data, dict) or 'scores' not in data:
@@ -382,6 +448,13 @@ code{{background:#334155;padding:0.2rem 0.4rem;border-radius:4px;font-size:0.8re
 <div class="section">
 <h2>🔍 Issues Found ({len(issues)})</h2>
 {issues_html}
+</div>
+
+<div class="section">
+<h2>🤖 AI Performance Analysis</h2>
+<div style="background:#0f172a;padding:1.5rem;border-radius:12px;border-left:4px solid #3b82f6;white-space:pre-wrap;font-size:0.9rem;line-height:1.6;color:#e2e8f0">
+{ai_analysis or "AI analysis unavailable - LLM service error"}
+</div>
 </div>
 
 <div class="section">

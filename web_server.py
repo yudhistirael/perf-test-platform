@@ -68,6 +68,7 @@ async def run_test(
     fe_pages_max: int = Form(10),
     be_endpoints_max: int = Form(15),
     be_requests_per_endpoint: int = Form(15),
+    concurrent_users: int = Form(1),
 ):
     """Start a new performance test."""
     job_id = str(uuid.uuid4())[:8]
@@ -78,6 +79,7 @@ async def run_test(
         'fe_pages_max': fe_pages_max,
         'be_endpoints_max': be_endpoints_max,
         'be_requests_per_endpoint': be_requests_per_endpoint,
+        'concurrent_users': concurrent_users,
         'status': 'starting',
         'progress': 0,
         'message': 'Initializing...',
@@ -87,7 +89,7 @@ async def run_test(
     ws_clients[job_id] = []
 
     # Run test in background
-    asyncio.create_task(_run_test_async(job_id, base_url, email, password, fe_pages_max, be_endpoints_max, be_requests_per_endpoint))
+    asyncio.create_task(_run_test_async(job_id, base_url, email, password, fe_pages_max, be_endpoints_max, be_requests_per_endpoint, concurrent_users))
 
     return RedirectResponse(url=f"/job/{job_id}", status_code=302)
 
@@ -150,7 +152,7 @@ async def list_reports(request: Request):
     return TEMPLATES.TemplateResponse(request=request, name="reports.html", context={"reports": report_list})
 
 
-async def _run_test_async(job_id: str, base_url: str, email: str, password: str, fe_pages_max: int = 10, be_endpoints_max: int = 15, be_requests_per_endpoint: int = 15):
+async def _run_test_async(job_id: str, base_url: str, email: str, password: str, fe_pages_max: int = 10, be_endpoints_max: int = 15, be_requests_per_endpoint: int = 15, concurrent_users: int = 1):
     """Run full test pipeline with live progress updates."""
     job = jobs[job_id]
 
@@ -169,7 +171,6 @@ async def _run_test_async(job_id: str, base_url: str, email: str, password: str,
         update(10, 'Scanning API endpoints...')
         scanner = APIScanner(base_url)
         endpoints = await scanner.discover()
-        token = scanner.token
         update(25, f'Discovered {len(endpoints)} API endpoints')
         await asyncio.sleep(0.3)
 
@@ -197,7 +198,24 @@ async def _run_test_async(job_id: str, base_url: str, email: str, password: str,
         # Step 3: BE Test
         update(65, 'Running Backend Load Tests...')
         be_test = APILoadTest(base_url, email, password, be_endpoints_max, be_requests_per_endpoint)
-        be_results = await be_test.run()
+        be_results = {}
+        # Reuse endpoints already discovered in Step 1 (don't re-scan)
+        be_endpoints = endpoints
+        # Authenticate once if credentials provided
+        if email and password:
+            try:
+                await be_test._authenticate()
+            except Exception:
+                pass
+        total_ep = min(len(be_endpoints), be_endpoints_max) or 1
+        for i, ep in enumerate(be_endpoints[:be_endpoints_max]):
+            pct = 65 + int((i / total_ep) * 18)
+            update(pct, f'Backend [{i+1}/{total_ep}]: {ep["method"]} {ep["path"]}')
+            try:
+                result = await be_test._test_endpoint(ep['path'], ep['method'], be_requests_per_endpoint, concurrent_users)
+                be_results[f"{ep['method']} {ep['path']}"] = result
+            except Exception as e:
+                be_results[f"{ep['method']} {ep['path']}"] = {'error': str(e)}
         be_count = sum(1 for v in be_results.values() if isinstance(v, dict) and 'avg_latency_ms' in v)
         update(85, f'Backend: load tested {be_count} endpoints')
         await asyncio.sleep(0.3)

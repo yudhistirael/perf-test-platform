@@ -47,18 +47,22 @@ button:active{transform:translateY(0)}
 <label for="password">Password <span style="color:#64748b;font-weight:400">(optional)</span></label>
 <input type="password" id="password" name="password" placeholder="••••••••">
 </div>
-<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:1rem">
+<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:1rem">
 <div class="form-group">
-<label for="fe_pages_max">Max Pages (Frontend)</label>
+<label for="fe_pages_max">Max Pages (FE)</label>
 <input type="number" id="fe_pages_max" name="fe_pages_max" value="10" min="1" max="500" style="width:100%;padding:0.75rem 1rem;background:#0f172a;border:1px solid #334155;border-radius:8px;color:#e2e8f0;font-size:1rem">
 </div>
 <div class="form-group">
-<label for="be_endpoints_max">Max Endpoints (Backend)</label>
+<label for="be_endpoints_max">Max Endpoints (BE)</label>
 <input type="number" id="be_endpoints_max" name="be_endpoints_max" value="15" min="1" max="500" style="width:100%;padding:0.75rem 1rem;background:#0f172a;border:1px solid #334155;border-radius:8px;color:#e2e8f0;font-size:1rem">
 </div>
 <div class="form-group">
 <label for="be_requests_per_endpoint">Requests / Endpoint</label>
 <input type="number" id="be_requests_per_endpoint" name="be_requests_per_endpoint" value="15" min="1" max="10000" style="width:100%;padding:0.75rem 1rem;background:#0f172a;border:1px solid #334155;border-radius:8px;color:#e2e8f0;font-size:1rem">
+</div>
+<div class="form-group">
+<label for="concurrent_users">Concurrent Users</label>
+<input type="number" id="concurrent_users" name="concurrent_users" value="1" min="1" max="500" style="width:100%;padding:0.75rem 1rem;background:#0f172a;border:1px solid #334155;border-radius:8px;color:#e2e8f0;font-size:1rem">
 </div>
 </div>
 <button type="submit">🚀 Run Performance Test</button>
