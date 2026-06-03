@@ -94,7 +94,10 @@ class APILoadTest:
             async with semaphore:
                 start = time.perf_counter()
                 try:
-                    url = urljoin(self.base_url, path)
+                    # Fix: ensure path appends to base_url, not replaces it
+                    # If path starts with /, remove it so it appends
+                    clean_path = path.lstrip('/') if path.startswith('/') else path
+                    url = self.base_url.rstrip('/') + '/' + clean_path
                     if method == 'GET':
                         r = await client.get(url, headers=headers)
                     elif method == 'POST':
