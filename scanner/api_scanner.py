@@ -7,9 +7,11 @@ from collections import defaultdict
 
 
 class APIScanner:
-    def __init__(self, base_url: str, token: str = None):
+    def __init__(self, base_url: str, token: str = None, email: str = None, password: str = None):
         self.base_url = base_url.rstrip('/')
         self.token = token
+        self.email = email
+        self.password = password
         self.endpoints = []
         self._seen = set()
 
@@ -250,6 +252,27 @@ class APIScanner:
             except Exception:
                 pass
 
+            # Step 1b: LOGIN FIRST if credentials provided
+            if self.email and self.password:
+                try:
+                    email_input = await page.query_selector("input[type=email], input[placeholder*=email], input[name*=email], input[name*=user]")
+                    pass_input = await page.query_selector("input[type=password], input[name*=password]")
+                    
+                    if email_input and pass_input:
+                        await email_input.fill(self.email)
+                        await pass_input.fill(self.password)
+                        
+                        # Find and click submit button
+                        submit = await page.query_selector("button[type=submit], button:has-text('Login'), button:has-text('Sign in'), button:has-text('login')")
+                        if submit:
+                            await submit.click()
+                        else:
+                            await page.keyboard.press("Enter")
+                        
+                        await page.wait_for_timeout(4000)
+                except Exception as e:
+                    pass
+
             # Step 2: Extract endpoints from page source (HTML)
             await self._extract_from_html(page)
 
@@ -262,7 +285,7 @@ class APIScanner:
             # Step 3c: Parse env.js for API base URL
             await self._parse_env_js()
 
-            # Step 4: Crawl all internal links (depth 2)
+            # Step 4: Crawl all internal links (depth 2) — THIS TRIGGERS MORE API CALLS
             await self._crawl_links(page, base_netloc, depth=2)
 
             # Step 5: Add all captured network requests (API calls to any host)

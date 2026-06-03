@@ -171,9 +171,9 @@ async def _run_test_async(job_id: str, base_url: str, email: str, password: str,
         update(5, 'Authenticating...', 'running')
         await asyncio.sleep(0.3)
 
-        # Step 1: Scan
+        # Step 1: Scan — pass credentials so scanner can login first
         update(10, 'Scanning API endpoints...')
-        scanner = APIScanner(base_url)
+        scanner = APIScanner(base_url, email=email, password=password)
         scan_result = await scanner.discover()
         
         # Handle new structured return from scanner
