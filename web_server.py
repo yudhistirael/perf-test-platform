@@ -174,55 +174,80 @@ async def _run_test_async(job_id: str, base_url: str, email: str, password: str,
         # Step 1: Scan
         update(10, 'Scanning API endpoints...')
         scanner = APIScanner(base_url)
-        endpoints = await scanner.discover()
-        update(25, f'Discovered {len(endpoints)} API endpoints')
-        await asyncio.sleep(0.3)
+        all_scanned = await scanner.discover()
+        update(25, f'Discovered {len(all_scanned)} paths')
+        
+        # Authenticate FIRST if credentials provided
+        auth_token = None
+        if email and password:
+            update(28, 'Authenticating...')
+            try:
+                import httpx
+                async with httpx.AsyncClient(verify=False, timeout=httpx.Timeout(15)) as client:
+                    for login_path in ['/api/auth/login', '/api/login', '/auth/login', '/login']:
+                        try:
+                            r = await client.post(urljoin(base_url, login_path), json={'email': email, 'password': password})
+                            if r.status_code in (200, 201):
+                                data = r.json()
+                                for key in ('token', 'access_token', 'accessToken', 'jwt'):
+                                    if key in data and isinstance(data[key], str):
+                                        auth_token = data[key]
+                                        break
+                            if auth_token:
+                                break
+                        except:
+                            continue
+            except:
+                pass
+        
+        # Separate FE pages (browseable paths) from BE endpoints (API paths starting with /api or /rest or known patterns)
+        be_patterns = ('/api/', '/rest/', '/graphql', '/v1/', '/v2/', '/endpoint/')
+        fe_pages = []
+        be_endpoints = []
+        
+        for item in all_scanned:
+            path = item.get('path', '')
+            method = item.get('method', 'GET')
+            is_api = any(path.startswith(p) for p in be_patterns) or method != 'GET'
+            if is_api:
+                be_endpoints.append(item)
+            else:
+                # Add name if missing
+                if 'name' not in item:
+                    item['name'] = path.strip('/').split('/')[-1].replace('-', ' ').title() or 'Homepage'
+                fe_pages.append(item)
+        
+        # Ensure homepage is in FE pages
+        if not any(p['path'] == '/' for p in fe_pages):
+            fe_pages.insert(0, {'path': '/', 'name': 'Homepage', 'method': 'GET'})
+        
+        update(30, f'Frontend: {len(fe_pages)} pages, Backend: {len(be_endpoints)} endpoints')
 
-        # Step 2: FE Test — reuse pages discovered by scanner
-        update(30, 'Running Frontend Performance Tests...')
-        # Build page list from scanner's discovered paths, limited by fe_pages_max
-        scanned_pages = []
-        seen_paths = {'/'}
-        for ep in endpoints:
-            path = ep['path']
-            if path and path not in seen_paths and not path.startswith(('http',)):
-                seen_paths.add(path)
-                name = path.strip('/').split('/')[-1].replace('-', ' ').title() or 'Homepage'
-                scanned_pages.append({'path': path, 'name': name})
-                if len(scanned_pages) >= fe_pages_max:
-                    break
-        if not scanned_pages:
-            scanned_pages = [{'path': '/', 'name': 'Homepage'}]
-        fe_test = LighthouseTest(base_url, email, password, pre_discovered_pages=scanned_pages)
+        # Step 2: FE Test — ONLY valid pages
+        update(35, 'Running Frontend Performance Tests...')
+        fe_test = LighthouseTest(base_url, email, password, pre_discovered_pages=fe_pages[:fe_pages_max])
         fe_results = await fe_test.run()
         fe_count = sum(1 for v in fe_results.values() if isinstance(v, dict) and 'load_time_ms' in v)
         update(60, f'Frontend: tested {fe_count} pages')
-        await asyncio.sleep(0.3)
 
-        # Step 3: BE Test
+        # Step 3: BE Test — ONLY API endpoints
         update(65, 'Running Backend Load Tests...')
         be_test = APILoadTest(base_url, email, password, be_endpoints_max, be_requests_per_endpoint)
+        be_test.token = auth_token  # Use auth token
         be_results = {}
-        # Reuse endpoints already discovered in Step 1 (don't re-scan)
-        be_endpoints = endpoints
-        # Authenticate once if credentials provided
-        if email and password:
-            try:
-                await be_test._authenticate()
-            except Exception:
-                pass
         total_ep = min(len(be_endpoints), be_endpoints_max) or 1
         for i, ep in enumerate(be_endpoints[:be_endpoints_max]):
             pct = 65 + int((i / total_ep) * 18)
             update(pct, f'Backend [{i+1}/{total_ep}]: {ep["method"]} {ep["path"]}')
             try:
                 result = await be_test._test_endpoint(ep['path'], ep['method'], be_requests_per_endpoint, concurrent_users)
-                be_results[f"{ep['method']} {ep['path']}"] = result
+                # Only include if NOT all 404
+                if result.get('status_codes', {}).get(404, 0) < be_requests_per_endpoint:
+                    be_results[f"{ep['method']} {ep['path']}"] = result
             except Exception as e:
-                be_results[f"{ep['method']} {ep['path']}"] = {'error': str(e)}
+                pass
         be_count = sum(1 for v in be_results.values() if isinstance(v, dict) and 'avg_latency_ms' in v)
         update(85, f'Backend: load tested {be_count} endpoints')
-        await asyncio.sleep(0.3)
 
         # Step 4: Generate Report
         update(90, 'Generating performance report...')
