@@ -273,7 +273,7 @@ async def _run_test_async(job_id: str, base_url: str, email: str, password: str,
         # Step 4: Generate Report
         update(90, 'Generating performance report...')
         results = {'frontend': fe_results, 'backend': be_results}
-        generator = ReportGenerator(base_url, results)
+        generator = ReportGenerator(base_url, results, stack=detected_stack, concurrent_users=concurrent_users)
         report_path = generator.generate()
         job['report_path'] = report_path
 

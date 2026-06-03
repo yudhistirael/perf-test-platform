@@ -7,9 +7,11 @@ from urllib.parse import urlparse
 
 
 class ReportGenerator:
-    def __init__(self, base_url: str, results: dict):
+    def __init__(self, base_url: str, results: dict, stack: dict = None, concurrent_users: int = 1):
         self.base_url = base_url
         self.results = results
+        self.stack = stack or {}
+        self.concurrent_users = concurrent_users
         self.domain = urlparse(base_url).netloc
 
     async def _get_llm_analysis(self, fe, be, issues, overall):
@@ -380,6 +382,7 @@ IMPORTANT: Tulis semua output dalam Bahasa Indonesia. Gunakan format markdown ya
                 <td>{data.get('min_latency_ms','-')}ms</td>
                 <td>{data.get('max_latency_ms','-')}ms</td>
                 <td>{data.get('median_latency_ms','-')}ms</td>
+                <td>{data.get('p75_latency_ms','-')}ms</td>
                 <td>{data.get('p90_latency_ms','-')}ms</td>
                 <td>{data.get('p95_latency_ms','-')}ms</td>
                 <td>{data.get('p99_latency_ms','-')}ms</td>
@@ -387,6 +390,22 @@ IMPORTANT: Tulis semua output dalam Bahasa Indonesia. Gunakan format markdown ya
                 <td>{data.get('success',0)}/{data.get('total_requests',0)}</td>
             </tr>''')
 
+        # Build stack section
+        stack_html = ''
+        if self.stack:
+            badges = []
+            for key, val in self.stack.items():
+                if val:
+                    badges.append(f'<span style="display:inline-block;background:#3b82f6;color:#fff;padding:0.25rem 0.75rem;border-radius:20px;font-size:0.75rem;margin-right:0.5rem;margin-bottom:0.25rem">{key}: {val}</span>')
+            if badges:
+                stack_html = f'''<div style="background:#1e293b;padding:1rem;border-radius:8px;margin-bottom:1.5rem">
+                    <h3 style="color:#e2e8f0;margin-bottom:0.5rem;font-size:0.9rem;text-transform:uppercase">📊 Detected Stack</h3>
+                    <div>{''.join(badges)}</div>
+                </div>'''
+        
+        # Concurrent users info
+        concurrent_info = f'<p style="color:#94a3b8;font-size:0.85rem">Concurrent Users Simulated: <strong>{self.concurrent_users}</strong></p>' if self.concurrent_users > 1 else ''
+        
         grade_color = '#10b981' if overall['grade'] in ('A','B') else '#f59e0b' if overall['grade'] == 'C' else '#ef4444'
 
         issues_html = ''
@@ -472,7 +491,11 @@ code{{background:#1e293b;padding:0.15rem 0.4rem;border-radius:5px;font-size:0.78
 <div class="container">
 <h1>📊 Performance Test Report</h1>
 <p class="subtitle">Target: <code>{self.base_url}</code> · Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
-
+{stack_html}
+{concurrent_info}
+<div style="text-align:right;margin-bottom:1rem">
+    <button onclick="window.print()" style="background:#3b82f6;color:#fff;border:none;padding:0.5rem 1.2rem;border-radius:8px;cursor:pointer;font-size:0.85rem">🖨️ Print / Save PDF</button>
+</div>
 <div class="grid">
 <div class="card"><h3>Overall Grade</h3><div class="value" style="color:{grade_color}">{overall['grade']}</div></div>
 <div class="card"><h3>Score</h3><div class="value">{overall['score']}/100</div></div>
@@ -516,7 +539,7 @@ code{{background:#1e293b;padding:0.15rem 0.4rem;border-radius:5px;font-size:0.78
 <h2>⚙️ Backend Performance</h2>
 <div style="overflow-x:auto">
 <table>
-<thead><tr><th>Endpoint</th><th>Avg</th><th>Min</th><th>Max</th><th>Median</th><th>P90</th><th>P95</th><th>P99</th><th>Err%</th><th>Success</th></tr></thead>
+<thead><tr><th>Endpoint</th><th>Avg</th><th>Min</th><th>Max</th><th>Median</th><th>P75</th><th>P90</th><th>P95</th><th>P99</th><th>Err%</th><th>Success</th></tr></thead>
 <tbody>{"".join(be_rows) or "<tr><td colspan=10 style='text-align:center;color:#64748b'>No backend data collected</td></tr>"}</tbody>
 </table>
 </div>

@@ -132,6 +132,30 @@ class APIScanner:
                     stack['ui_framework'] = 'Tailwind'
                 elif 'material' in html.lower():
                     stack['ui_framework'] = 'Material Design'
+                
+                # Detect backend / API type from env.js + headers
+                try:
+                    env_r = await client.get(urljoin(self.base_url, '/env.js'))
+                    if env_r.status_code == 200:
+                        env_txt = env_r.text
+                        if 'graphql' in env_txt.lower():
+                            stack['api_type'] = 'GraphQL'
+                        elif '/gateway/' in env_txt or '/api/' in env_txt or '/v1' in env_txt or '/v2' in env_txt:
+                            stack['api_type'] = 'REST'
+                        # API gateway hint
+                        if 'gateway' in env_txt.lower():
+                            stack['backend'] = 'API Gateway'
+                        if 'wso2' in env_txt.lower():
+                            stack['backend'] = 'WSO2 API Gateway'
+                except Exception:
+                    pass
+                
+                # Powered-by header
+                if 'x-powered-by' in headers:
+                    stack['powered_by'] = headers['x-powered-by']
+                # ASP.NET
+                if 'x-aspnet-version' in headers or 'x-aspnetmvc-version' in headers:
+                    stack['backend'] = 'ASP.NET'
         except Exception:
             pass
         
