@@ -16,7 +16,15 @@ class ReportGenerator:
         """Get 9router LLM analysis of performance results."""
         try:
             import httpx
-            
+            import os
+
+            api_key = os.environ.get('ROUTER_API_KEY', '')
+            api_base = os.environ.get('ROUTER_API_BASE', 'http://46.250.234.185:20128/v1')
+            model = os.environ.get('ROUTER_MODEL', 'kr/claude-sonnet-4.5')
+            if not api_key:
+                print("ROUTER_API_KEY not set, skipping LLM analysis")
+                return None
+
             # Prepare summary for LLM
             summary = f"""
 Performance Test Results for {self.base_url}:
@@ -48,9 +56,14 @@ Provide:
             
             async with httpx.AsyncClient(timeout=httpx.Timeout(30)) as client:
                 r = await client.post(
-                    "http://46.250.234.185:20128/v1/chat/completions",
-                    json=payload,
-                    headers={"Authorization": "Bearer sk-34595258629c1acb-s28ah4-978aa6e1"}
+                    f"{api_base}/chat/completions",
+                    json={
+                        "model": model,
+                        "messages": [{"role": "user", "content": summary}],
+                        "temperature": 0.7,
+                        "max_tokens": 1000,
+                    },
+                    headers={"Authorization": f"Bearer {api_key}"}
                 )
                 if r.status_code == 200:
                     data = r.json()
