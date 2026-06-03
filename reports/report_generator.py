@@ -39,20 +39,13 @@ Key Metrics:
 - Average BE Latency: {overall.get('avg_be_latency', 'N/A')}ms
 - Error Rate: {overall.get('error_rate', 'N/A')}%
 
-Issues Found: {json.dumps([{'type': i['type'], 'severity': i['severity'], 'message': i['message']} for i in issues[:5]], indent=2)}
+Issues Found: {json.dumps([{'type': i.get('type','?'), 'severity': i.get('severity','?'), 'message': i.get('message','')} for i in issues[:5]], indent=2)}
 
 Provide:
 1. Executive summary (2-3 sentences) of overall performance
 2. Top 3 technical improvements needed (specific, actionable)
 3. Estimated impact if improvements are implemented
 """
-            
-            payload = {
-                "model": "kr/claude-sonnet-4.5",
-                "messages": [{"role": "user", "content": summary}],
-                "temperature": 0.7,
-                "max_tokens": 1000,
-            }
             
             async with httpx.AsyncClient(timeout=httpx.Timeout(30)) as client:
                 r = await client.post(
@@ -69,9 +62,15 @@ Provide:
                 if r.status_code == 200:
                     data = r.json()
                     analysis = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+                    print(f"LLM analysis success: {len(analysis)} chars")
                     return analysis
+                else:
+                    print(f"LLM HTTP error: {r.status_code} - {r.text[:200]}")
+                    return None
         except Exception as e:
-            print(f"LLM analysis failed: {e}")
+            print(f"LLM analysis exception: {type(e).__name__}: {e}")
+            import traceback
+            traceback.print_exc()
         return None
 
     def generate(self):

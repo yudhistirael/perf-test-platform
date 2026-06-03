@@ -9,8 +9,8 @@ from pathlib import Path
 from typing import Optional
 from dotenv import load_dotenv
 
-# Load .env file
-load_dotenv()
+# Load .env from this file's directory (cwd-independent)
+load_dotenv(Path(__file__).parent / ".env")
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request, Form
 from fastapi.responses import HTMLResponse, FileResponse, RedirectResponse
