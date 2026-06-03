@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Running Test — {{ job.base_url }}</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:linear-gradient(135deg,#0f172a 0%,#1e293b 100%);color:#e2e8f0;min-height:100vh;padding:2rem}
+.container{max-width:700px;margin:0 auto}
+h1{font-size:1.8rem;margin-bottom:0.5rem;color:#f1f5f9}
+.subtitle{color:#94a3b8;margin-bottom:2rem}
+.card{background:#1e293b;border-radius:16px;padding:2rem;border:1px solid #334155}
+.progress-bar-bg{background:#334155;border-radius:999px;height:16px;overflow:hidden;margin:1rem 0}
+.progress-bar{background:linear-gradient(90deg,#3b82f6,#60a5fa);height:100%;border-radius:999px;transition:width 0.5s ease;width:0%}
+.status-msg{font-size:1.1rem;color:#cbd5e1;margin:1rem 0}
+.progress-pct{font-size:2rem;font-weight:700;color:#60a5fa}
+.steps{margin-top:1.5rem;display:grid;grid-template-columns:1fr 1fr;gap:0.75rem}
+.step{background:#0f172a;padding:0.75rem 1rem;border-radius:10px;font-size:0.85rem;border:1px solid #334155;display:flex;align-items:center;gap:0.5rem}
+.step.done{border-color:#10b981;color:#10b981}
+.step.active{border-color:#60a5fa;color:#60a5fa;animation:pulse 1.5s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.6}}
+.done-section{text-align:center;padding:2rem;display:none}
+.done-section h2{font-size:1.5rem;color:#10b981;margin-bottom:1rem}
+.btn{display:inline-block;background:linear-gradient(135deg,#10b981,#059669);color:white;padding:0.75rem 2rem;border-radius:8px;text-decoration:none;font-weight:600;margin-top:1rem}
+.btn:hover{opacity:0.9}
+.btn-back{background:linear-gradient(135deg,#3b82f6,#2563eb);margin-left:1rem}
+.error-section{text-align:center;padding:2rem;display:none}
+.error-section h2{color:#ef4444;margin-bottom:1rem}
+.target-info{background:#0f172a;padding:1rem;border-radius:8px;margin-bottom:1.5rem;font-size:0.9rem}
+.target-info span{color:#60a5fa;font-weight:600}
+</style>
+</head>
+<body>
+<div class="container">
+<h1>⚡ Performance Test Running</h1>
+<p class="subtitle">Job ID: <code>{{ job_id }}</code></p>
+
+<div class="card">
+  <div class="target-info">
+    Target: <span>{{ job.base_url }}</span> &nbsp;|&nbsp; Started: {{ job.started_at[:19].replace('T',' ') }}
+  </div>
+
+  <div id="running-section">
+    <div class="progress-pct" id="pct">0%</div>
+    <div class="progress-bar-bg">
+      <div class="progress-bar" id="bar"></div>
+    </div>
+    <div class="status-msg" id="msg">Initializing...</div>
+
+    <div class="steps">
+      <div class="step" id="step-scan">🔍 Scanning APIs</div>
+      <div class="step" id="step-fe">🖥️ Frontend Test</div>
+      <div class="step" id="step-be">⚙️ Backend Load Test</div>
+      <div class="step" id="step-report">📊 Generate Report</div>
+    </div>
+  </div>
+
+  <div class="done-section" id="done-section">
+    <h2>✅ Test Complete!</h2>
+    <p style="color:#94a3b8">Your performance report is ready.</p>
+    <a href="#" id="report-link" class="btn" target="_blank">📊 View Report</a>
+    <a href="/" class="btn btn-back">← New Test</a>
+  </div>
+
+  <div class="error-section" id="error-section">
+    <h2>❌ Test Failed</h2>
+    <p id="error-msg" style="color:#f87171;margin-bottom:1rem"></p>
+    <a href="/" class="btn btn-back">← Try Again</a>
+  </div>
+</div>
+</div>
+
+<script>
+const jobId = "{{ job_id }}";
+
+function setStepState(progress) {
+  const scan = document.getElementById('step-scan');
+  const fe = document.getElementById('step-fe');
+  const be = document.getElementById('step-be');
+  const rep = document.getElementById('step-report');
+  [scan,fe,be,rep].forEach(s => s.className = 'step');
+  if (progress >= 10) scan.className = 'step done';
+  else if (progress >= 5) scan.className = 'step active';
+  if (progress >= 60) fe.className = 'step done';
+  else if (progress >= 25) fe.className = 'step active';
+  if (progress >= 85) be.className = 'step done';
+  else if (progress >= 60) be.className = 'step active';
+  if (progress >= 100) rep.className = 'step done';
+  else if (progress >= 85) rep.className = 'step active';
+}
+
+function update(data) {
+  const pct = data.progress || 0;
+  document.getElementById('bar').style.width = pct + '%';
+  document.getElementById('pct').textContent = pct + '%';
+  document.getElementById('msg').textContent = data.message || '';
+  setStepState(pct);
+  if (data.status === 'done') {
+    document.getElementById('running-section').style.display = 'none';
+    document.getElementById('done-section').style.display = 'block';
+    if (data.report_path) {
+      const fname = data.report_path.split('/').pop();
+      document.getElementById('report-link').href = '/report/' + fname;
+    }
+  } else if (data.status === 'error') {
+    document.getElementById('running-section').style.display = 'none';
+    document.getElementById('error-section').style.display = 'block';
+    document.getElementById('error-msg').textContent = data.message;
+  }
+}
+
+// Poll every 2 seconds instead of WebSocket
+function poll() {
+  fetch('/api/job/' + jobId)
+    .then(r => r.json())
+    .then(data => {
+      update(data);
+      if (data.status !== 'done' && data.status !== 'error') {
+        setTimeout(poll, 2000);
+      }
+    })
+    .catch(() => setTimeout(poll, 3000));
+}
+
+poll();
+</script>
+</body>
+</html>

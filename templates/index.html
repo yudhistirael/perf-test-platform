@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Performance Test Platform</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:linear-gradient(135deg,#0f172a 0%,#1e293b 100%);color:#e2e8f0;min-height:100vh;padding:2rem}
+.container{max-width:900px;margin:0 auto}
+h1{font-size:2.5rem;margin-bottom:0.5rem;background:linear-gradient(135deg,#60a5fa,#3b82f6);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.subtitle{color:#94a3b8;margin-bottom:3rem;font-size:1rem}
+.card{background:#1e293b;border-radius:16px;padding:2rem;margin-bottom:2rem;border:1px solid #334155;box-shadow:0 20px 25px -5px rgba(0,0,0,0.1)}
+.form-group{margin-bottom:1.5rem}
+label{display:block;margin-bottom:0.5rem;font-weight:600;color:#f1f5f9;font-size:0.9rem}
+input[type="text"],input[type="email"],input[type="password"],input[type="url"]{width:100%;padding:0.75rem 1rem;background:#0f172a;border:1px solid #334155;border-radius:8px;color:#e2e8f0;font-size:1rem;transition:border-color 0.3s}
+input:focus{outline:none;border-color:#60a5fa;box-shadow:0 0 0 3px rgba(96,165,250,0.1)}
+button{background:linear-gradient(135deg,#60a5fa,#3b82f6);color:white;padding:0.75rem 2rem;border:none;border-radius:8px;font-weight:600;cursor:pointer;font-size:1rem;transition:transform 0.2s,box-shadow 0.2s}
+button:hover{transform:translateY(-2px);box-shadow:0 10px 20px rgba(60,130,246,0.3)}
+button:active{transform:translateY(0)}
+.info{background:#1e40af22;border-left:4px solid #60a5fa;padding:1rem;border-radius:8px;margin-top:1rem;color:#e0e7ff;font-size:0.9rem}
+.reports-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:1rem;margin-top:2rem}
+.report-card{background:#334155;padding:1rem;border-radius:12px;text-decoration:none;color:inherit;transition:transform 0.2s,box-shadow 0.2s}
+.report-card:hover{transform:translateY(-2px);box-shadow:0 10px 20px rgba(0,0,0,0.3)}
+.report-name{font-weight:600;margin-bottom:0.5rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.report-meta{font-size:0.8rem;color:#cbd5e1;margin-top:0.5rem}
+.link{color:#60a5fa;text-decoration:none}
+.link:hover{text-decoration:underline}
+</style>
+</head>
+<body>
+<div class="container">
+<h1>⚡ Performance Test Platform</h1>
+<p class="subtitle">Automated Frontend + Backend Performance Testing</p>
+
+<div class="card">
+<h2 style="margin-bottom:1.5rem;color:#f1f5f9">📊 Start New Test</h2>
+<form method="POST" action="/api/test">
+<div class="form-group">
+<label for="base_url">Target URL</label>
+<input type="url" id="base_url" name="base_url" placeholder="https://example.com" required>
+</div>
+<div class="form-group">
+<label for="email">Email <span style="color:#64748b;font-weight:400">(optional)</span></label>
+<input type="email" id="email" name="email" placeholder="user@example.com">
+</div>
+<div class="form-group">
+<label for="password">Password <span style="color:#64748b;font-weight:400">(optional)</span></label>
+<input type="password" id="password" name="password" placeholder="••••••••">
+</div>
+<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:1rem">
+<div class="form-group">
+<label for="fe_pages_max">Max Pages (Frontend)</label>
+<input type="number" id="fe_pages_max" name="fe_pages_max" value="10" min="1" max="500" style="width:100%;padding:0.75rem 1rem;background:#0f172a;border:1px solid #334155;border-radius:8px;color:#e2e8f0;font-size:1rem">
+</div>
+<div class="form-group">
+<label for="be_endpoints_max">Max Endpoints (Backend)</label>
+<input type="number" id="be_endpoints_max" name="be_endpoints_max" value="15" min="1" max="500" style="width:100%;padding:0.75rem 1rem;background:#0f172a;border:1px solid #334155;border-radius:8px;color:#e2e8f0;font-size:1rem">
+</div>
+<div class="form-group">
+<label for="be_requests_per_endpoint">Requests / Endpoint</label>
+<input type="number" id="be_requests_per_endpoint" name="be_requests_per_endpoint" value="15" min="1" max="10000" style="width:100%;padding:0.75rem 1rem;background:#0f172a;border:1px solid #334155;border-radius:8px;color:#e2e8f0;font-size:1rem">
+</div>
+</div>
+<button type="submit">🚀 Run Performance Test</button>
+<div class="info">
+✓ Tests both Frontend (Lighthouse: FCP, LCP, CLS) and Backend (API latency, throughput)<br>
+✓ Auto-discovers API endpoints and website pages<br>
+✓ Generates detailed HTML report with metrics and scores (A-F grade)<br>
+✓ Test takes 3-5 minutes depending on site size
+</div>
+</form>
+</div>
+
+{% if reports %}
+<div class="card">
+<h2 style="margin-bottom:1.5rem;color:#f1f5f9">📈 Past Reports</h2>
+<div class="reports-grid">
+{% for report in reports %}
+<a href="/report/{{ report.filename }}" class="report-card" target="_blank">
+<div class="report-name" title="{{ report.filename }}">{{ report.filename }}</div>
+<div class="report-meta">
+📄 {{ report.size }}<br>
+🕒 {{ report.date }}
+</div>
+</a>
+{% endfor %}
+</div>
+</div>
+{% endif %}
+
+</div>
+</body>
+</html>

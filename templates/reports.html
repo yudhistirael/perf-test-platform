@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Reports — Performance Test Platform</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:linear-gradient(135deg,#0f172a 0%,#1e293b 100%);color:#e2e8f0;min-height:100vh;padding:2rem}
+.container{max-width:900px;margin:0 auto}
+h1{font-size:2rem;margin-bottom:0.5rem;color:#f1f5f9}
+.subtitle{color:#94a3b8;margin-bottom:2rem}
+.link{color:#60a5fa;text-decoration:none}
+.link:hover{text-decoration:underline}
+.reports-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:1rem;margin-top:2rem}
+.report-card{background:#334155;padding:1rem;border-radius:12px;text-decoration:none;color:inherit;transition:transform 0.2s,box-shadow 0.2s}
+.report-card:hover{transform:translateY(-2px);box-shadow:0 10px 20px rgba(0,0,0,0.3)}
+.report-name{font-weight:600;margin-bottom:0.5rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.report-meta{font-size:0.8rem;color:#cbd5e1;margin-top:0.5rem}
+</style>
+</head>
+<body>
+<div class="container">
+<h1>📈 All Reports</h1>
+<p class="subtitle"><a href="/" class="link">← Back to Dashboard</a></p>
+<div class="reports-grid">
+{% for report in reports %}
+<a href="/report/{{ report.filename }}" class="report-card" target="_blank">
+<div class="report-name" title="{{ report.filename }}">{{ report.filename }}</div>
+<div class="report-meta">📄 {{ report.size }}<br>🕒 {{ report.date }}</div>
+</a>
+{% endfor %}
+</div>
+</div>
+</body>
+</html>
