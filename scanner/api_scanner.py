@@ -13,7 +13,7 @@ class APIScanner:
         self.endpoints = []
         self._seen = set()
 
-    def _add(self, path, method='GET', source='auto'):
+    def _add(self, path, method='GET', source='auto', full_url=None, host=None):
         path = path.strip()
         if not path or len(path) > 500:
             return
@@ -40,11 +40,17 @@ class APIScanner:
         if path == '/api' or path == '/api/':
             return
         
-        key = f"{method}:{path}"
+        # Track detected API host for BE tests
+        if host and source in ('network-intercept', 'xhr', 'fetch'):
+            if not hasattr(self, 'api_hosts'):
+                self.api_hosts = defaultdict(int)
+            self.api_hosts[host] += 1
+        
+        key = f"{method}:{full_url or path}"
         if key in self._seen:
             return
         self._seen.add(key)
-        self.endpoints.append({'path': path, 'method': method.upper(), 'source': source})
+        self.endpoints.append({'path': path, 'method': method.upper(), 'source': source, 'full_url': full_url, 'host': host})
 
     async def discover(self):
         """Full reactive discovery using headless browser + network intercept."""
@@ -214,8 +220,25 @@ class APIScanner:
             def on_request(request):
                 url = request.url
                 parsed = urlparse(url)
-                if parsed.netloc == base_netloc or parsed.netloc == '' or parsed.netloc.startswith('api.') or parsed.netloc.startswith(base_netloc.split('.')[0]):
-                    captured_urls.append({'url': url, 'method': request.method, 'source': 'network'})
+                method = request.method
+                path = parsed.path
+                host = parsed.netloc
+                
+                # Capture EVERYTHING that looks like an API call
+                # Look for: /api, /gateway, /graphql, /v1, /v2, /service, /endpoint, /rpc, etc
+                is_api_like = any(x in path.lower() for x in ['/api', '/gateway', '/graphql', '/v1', '/v2', '/service', '/endpoint', '/rpc', '/inventory'])
+                
+                # OR if it's to a different host (API server)
+                is_different_host = host != base_netloc
+                
+                if is_api_like or is_different_host:
+                    captured_urls.append({
+                        'url': url,
+                        'path': path,
+                        'method': method,
+                        'source': 'network-intercept',
+                        'host': host
+                    })
             
             page.on('request', on_request)
 
@@ -242,11 +265,16 @@ class APIScanner:
             # Step 4: Crawl all internal links (depth 2)
             await self._crawl_links(page, base_netloc, depth=2)
 
-            # Step 5: Add all captured network requests
+            # Step 5: Add all captured network requests (API calls to any host)
             for cap in captured_urls:
-                parsed = urlparse(cap['url'])
-                if parsed.netloc == base_netloc:
-                    self._add(parsed.path, cap['method'], cap['source'])
+                self._add(cap['path'], cap['method'], 'network-intercept', full_url=cap['url'], host=cap['host'])
+
+            # Auto-detect API host from captured requests — most-called non-base host
+            if hasattr(self, 'api_hosts') and self.api_hosts:
+                api_host = max(self.api_hosts, key=self.api_hosts.get)
+                parsed_base = urlparse(self.base_url)
+                if api_host != parsed_base.netloc:
+                    self.api_base_url = f"{parsed_base.scheme}://{api_host}"
 
             # Step 6: Trigger XHR/API calls by interacting with page
             await self._trigger_interactions(page, captured_urls, base_netloc)
