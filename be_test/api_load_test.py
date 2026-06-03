@@ -129,27 +129,19 @@ class APILoadTest:
                 result['status_codes'][status] = result['status_codes'].get(status, 0) + 1
                 if status < 400:
                     result['success'] += 1
-                else:
-                    result['errors'] += 1
 
+        # Calculate percentiles and stats even if all 401/403 (don't filter them out)
+        result['latencies'].sort()
         if result['latencies']:
-            result['avg_latency_ms'] = round(mean(result['latencies']), 2)
-            result['min_latency_ms'] = round(min(result['latencies']), 2)
-            result['max_latency_ms'] = round(max(result['latencies']), 2)
-            result['median_latency_ms'] = round(median(result['latencies']), 2)
-            if len(result['latencies']) > 1:
-                result['stdev_latency_ms'] = round(stdev(result['latencies']), 2)
-            sorted_l = sorted(result['latencies'])
-            n = len(sorted_l)
-            result['p50_latency_ms'] = round(sorted_l[int(n * 0.50)], 2)
-            result['p75_latency_ms'] = round(sorted_l[int(n * 0.75)], 2)
-            result['p90_latency_ms'] = round(sorted_l[int(n * 0.90)], 2)
-            result['p95_latency_ms'] = round(sorted_l[int(n * 0.95)], 2)
-            result['p99_latency_ms'] = round(sorted_l[min(int(n * 0.99), n-1)], 2)
-
-        result['error_rate'] = round((result['errors'] / num_requests) * 100, 2)
-        result['total_requests'] = num_requests
-        result['concurrent_users'] = concurrent_users
-        result['throughput_rps'] = round(num_requests / (sum(result['latencies']) / 1000 / concurrent_users), 2) if result['latencies'] else 0
-        result['latencies'] = []
+            result['min_latency_ms'] = result['latencies'][0]
+            result['max_latency_ms'] = result['latencies'][-1]
+            result['median_latency_ms'] = result['latencies'][len(result['latencies'])//2]
+            result['avg_latency_ms'] = sum(result['latencies']) / len(result['latencies'])
+            result['p75_latency_ms'] = result['latencies'][int(len(result['latencies']) * 0.75)]
+            result['p90_latency_ms'] = result['latencies'][int(len(result['latencies']) * 0.90)]
+            result['p95_latency_ms'] = result['latencies'][int(len(result['latencies']) * 0.95)]
+            result['p99_latency_ms'] = result['latencies'][int(len(result['latencies']) * 0.99)]
+            result['total_requests'] = num_requests
+            result['error_rate'] = round((result['errors'] / num_requests) * 100, 1) if num_requests > 0 else 0
+        
         return result

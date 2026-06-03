@@ -252,8 +252,50 @@ async def _run_test_async(job_id: str, base_url: str, email: str, password: str,
 
         # Step 3: BE Test — ONLY API endpoints
         update(65, 'Running Backend Load Tests...')
-        # Use api_base_url from scanner (may be different host/port for microservices)
-        be_test = APILoadTest(api_base_url, email, password, be_endpoints_max, be_requests_per_endpoint)
+        
+        # Auto-detect working API base URL by probing candidates
+        test_path = be_endpoints[0].get('path', '/api/inventory/service-point/dd-sp') if be_endpoints else '/api/test'
+        candidate_bases = [
+            base_url,                          # http://host:port
+            api_base_url,                      # gateway from scanner
+        ]
+        
+        # If api_base_url has /gateway/ prefix, also try without it
+        if api_base_url and '/gateway/' in api_base_url:
+            gateway_base = api_base_url.split('/gateway/')[0]
+            if gateway_base not in candidate_bases:
+                candidate_bases.append(gateway_base)
+        
+        # If base_url has port 3523, try with /api path prefix
+        if base_url and '3523' in base_url:
+            api_prefix_base = base_url.rstrip('/') + '/api'
+            if api_prefix_base not in candidate_bases:
+                candidate_bases.insert(0, api_prefix_base)
+        
+        # Probe each candidate
+        detected_base = None
+        try:
+            async with httpx.AsyncClient(verify=False, timeout=httpx.Timeout(5)) as client:
+                for cand in candidate_bases:
+                    probe_path = test_path.lstrip('/')
+                    url = cand.rstrip('/') + '/' + probe_path
+                    try:
+                        r = await client.get(url)
+                        status = r.status_code
+                        # 401/403/200/400 = endpoint exists; 404 = wrong base
+                        if status != 404:
+                            detected_base = cand
+                            update(66, f'API base detected: {cand}')
+                            break
+                    except:
+                        continue
+        except:
+            pass
+        
+        if not detected_base:
+            detected_base = base_url
+        
+        be_test = APILoadTest(detected_base, email, password, be_endpoints_max, be_requests_per_endpoint)
         be_test.token = auth_token  # Use auth token
         be_results = {}
         total_ep = min(len(be_endpoints), be_endpoints_max) or 1
