@@ -426,14 +426,17 @@ class APIScanner:
                     # Find ALL URL-like strings
                     url_patterns = re.findall(r'["\'`]((?:/|https?://)[a-zA-Z0-9_/.-]{3,})["\'`]', content)
                     # Also find route definitions (React Router, Vue Router, etc.)
-                    routes = re.findall(r'path\s*:\s*["\']([^"\']+)["\']', content, re.IGNORECASE)
+                    routes = []
                     for u in url_patterns + routes:
                         if u.startswith('http'):
                             parsed = urlparse(u)
                             if parsed.netloc == urlparse(self.base_url).netloc:
-                                self._add(parsed.path, 'GET', 'js-bundle')
+                                p = parsed.path
+                                if any(x in p for x in ['/api/', '/v1/', '/v2/', '/gateway/', '/graphql']):
+                                    self._add(p, 'GET', 'js-bundle')
                         elif u.startswith('/'):
-                            self._add(u, 'GET', 'js-bundle')
+                            if any(x in u for x in ['/api/', '/v1/', '/v2/', '/gateway/', '/graphql']):
+                                self._add(u, 'GET', 'js-bundle')
                 except Exception:
                     continue
 

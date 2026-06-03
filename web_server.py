@@ -239,7 +239,15 @@ async def _run_test_async(job_id: str, base_url: str, email: str, password: str,
         
         # Ensure homepage is in FE pages
         if not any(p['path'] == '/' for p in fe_pages):
-            fe_pages.insert(0, {'path': '/', 'name': 'Homepage', 'method': 'GET'})
+            fe_pages.insert(0, {'path': '/', 'name': 'Homepage', 'method': 'GET', 'source': 'homepage'})
+        
+        # If still few FE pages, use all non-API paths from scanner as FE candidates
+        if len(fe_pages) < 5:
+            candidates = [e for e in all_scanned if e.get('source') in fe_sources and e.get('path') not in [p.get('path') for p in fe_pages]]
+            for c in candidates[:5]:
+                if 'name' not in c:
+                    c['name'] = c.get('path', '/').strip('/').split('/')[-1].replace('-', ' ').title() or 'Page'
+                fe_pages.append(c)
         
         update(30, f'Frontend: {len(fe_pages)} pages, Backend: {len(be_endpoints)} endpoints')
 
